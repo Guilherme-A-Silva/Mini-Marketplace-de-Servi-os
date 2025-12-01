@@ -5,6 +5,9 @@ import ServiceVariation from './ServiceVariation.js';
 import AvailabilitySlot from './AvailabilitySlot.js';
 import Booking from './Booking.js';
 import Notification from './Notification.js';
+import Discount from './Discount.js';
+import Review from './Review.js';
+import Message from './Message.js';
 
 // Definir relacionamentos
 
@@ -48,6 +51,38 @@ Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 Booking.hasMany(Notification, { foreignKey: 'bookingId', as: 'notifications' });
 Notification.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
 
+// ServiceVariation -> Discount
+ServiceVariation.hasMany(Discount, { foreignKey: 'serviceVariationId', as: 'discounts' });
+Discount.belongsTo(ServiceVariation, { foreignKey: 'serviceVariationId', as: 'variation' });
+
+// Booking -> Review (1:1)
+Booking.hasOne(Review, { foreignKey: 'bookingId', as: 'review' });
+Review.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+
+// Service -> Review
+Service.hasMany(Review, { foreignKey: 'serviceId', as: 'reviews' });
+Review.belongsTo(Service, { foreignKey: 'serviceId', as: 'service' });
+
+// User -> Review (Provider)
+User.hasMany(Review, { foreignKey: 'providerId', as: 'providerReviews' });
+Review.belongsTo(User, { foreignKey: 'providerId', as: 'provider' });
+
+// User -> Review (Client)
+User.hasMany(Review, { foreignKey: 'clientId', as: 'clientReviews' });
+Review.belongsTo(User, { foreignKey: 'clientId', as: 'client' });
+
+// User -> Message (Sender)
+User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
+Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
+
+// User -> Message (Receiver)
+User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
+Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+
+// Booking -> Message
+Booking.hasMany(Message, { foreignKey: 'bookingId', as: 'messages' });
+Message.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+
 export {
   User,
   ServiceType,
@@ -55,6 +90,9 @@ export {
   ServiceVariation,
   AvailabilitySlot,
   Booking,
-  Notification
+  Notification,
+  Discount,
+  Review,
+  Message
 };
 

@@ -7,6 +7,8 @@
   let serviceTypes = [];
   let selectedType = '';
   let searchQuery = '';
+  let filterCity = '';
+  let filterNeighborhood = '';
   let loading = true;
 
   onMount(async () => {
@@ -29,6 +31,8 @@
       const params = {};
       if (selectedType) params.serviceTypeId = selectedType;
       if (searchQuery) params.search = searchQuery;
+      if (filterCity) params.city = filterCity;
+      if (filterNeighborhood) params.neighborhood = filterNeighborhood;
 
       const response = await api.get('/services', { params });
       services = response.data.services;
@@ -57,34 +61,68 @@
 
   <!-- Busca e Filtros -->
   <div class="bg-white p-4 md:p-6 rounded-lg shadow-md mb-6 md:mb-8">
-    <div class="flex flex-col gap-3 md:flex-row md:gap-4">
-      <div class="flex-1">
-        <input
-          type="text"
-          placeholder="Buscar serviços..."
-          bind:value={searchQuery}
-          on:keydown={(e) => e.key === 'Enter' && handleSearch()}
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
-        />
-      </div>
-      <div class="w-full md:w-64">
-        <select
-          bind:value={selectedType}
-          on:change={handleTypeChange}
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+    <div class="space-y-4">
+      <div class="flex flex-col gap-3 md:flex-row md:gap-4">
+        <div class="flex-1">
+          <input
+            type="text"
+            placeholder="Buscar serviços..."
+            bind:value={searchQuery}
+            on:keydown={(e) => e.key === 'Enter' && handleSearch()}
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+          />
+        </div>
+        <div class="w-full md:w-64">
+          <select
+            bind:value={selectedType}
+            on:change={handleTypeChange}
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+          >
+            <option value="">Todos os tipos</option>
+            {#each serviceTypes as type}
+              <option value={type.id}>{type.name}</option>
+            {/each}
+          </select>
+        </div>
+        <button
+          on:click={handleSearch}
+          class="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm md:text-base"
         >
-          <option value="">Todos os tipos</option>
-          {#each serviceTypes as type}
-            <option value={type.id}>{type.name}</option>
-          {/each}
-        </select>
+          Buscar
+        </button>
       </div>
-      <button
-        on:click={handleSearch}
-        class="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm md:text-base"
-      >
-        Buscar
-      </button>
+      
+      <!-- Filtros de Localização -->
+      <div class="flex flex-col gap-3 md:flex-row md:gap-4 border-t pt-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+          <input
+            type="text"
+            placeholder="Ex: São Paulo"
+            bind:value={filterCity}
+            on:keydown={(e) => e.key === 'Enter' && handleSearch()}
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+          />
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+          <input
+            type="text"
+            placeholder="Ex: Centro"
+            bind:value={filterNeighborhood}
+            on:keydown={(e) => e.key === 'Enter' && handleSearch()}
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+          />
+        </div>
+        <div class="flex items-end">
+          <button
+            on:click={() => { filterCity = ''; filterNeighborhood = ''; loadServices(); }}
+            class="w-full md:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm md:text-base"
+          >
+            Limpar
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

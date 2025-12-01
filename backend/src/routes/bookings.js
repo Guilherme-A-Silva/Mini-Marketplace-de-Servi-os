@@ -6,7 +6,8 @@ import {
   rejectBooking,
   cancelBooking,
   acceptSuggestion,
-  rejectSuggestion
+  rejectSuggestion,
+  completeBooking
 } from '../controllers/bookingController.js';
 import { authenticate, requireProvider } from '../middleware/auth.js';
 import { body } from 'express-validator';
@@ -65,6 +66,9 @@ router.put('/:id/reject',
 );
 
 router.put('/:id/cancel', authenticate, cancelBooking);
+
+// Rota para prestador finalizar pedido
+router.put('/:id/complete', authenticate, requireProvider, completeBooking);
 
 // Rotas para cliente aceitar/rejeitar sugestão
 router.put('/:id/accept-suggestion', authenticate, acceptSuggestion);

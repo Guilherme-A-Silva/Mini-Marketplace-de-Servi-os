@@ -1,17 +1,18 @@
-import { Service, ServiceVariation, ServiceType, User } from '../models/index.js';
+import { Service, ServiceVariation, ServiceType, User, Discount, Review } from '../models/index.js';
 import { ElasticsearchService } from '../services/elasticsearchService.js';
 import { RedisService } from '../services/redisService.js';
 import { validationResult } from 'express-validator';
+import { fn, col } from 'sequelize';
 
 export const getServices = async (req, res) => {
   try {
-    const { search, serviceTypeId, limit = 50, offset = 0 } = req.query;
+    const { search, serviceTypeId, city, neighborhood, limit = 50, offset = 0 } = req.query;
     
     let serviceIds = null;
 
     // Se houver busca, usar Elasticsearch
     if (search) {
-      const cached = await RedisService.getCachedSearch(search, { serviceTypeId });
+      const cached = await RedisService.getCachedSearch(search, { serviceTypeId, city, neighborhood });
       if (cached) {
         serviceIds = cached.map(item => item.id);
       } else {
@@ -21,7 +22,7 @@ export const getServices = async (req, res) => {
           offset: parseInt(offset)
         });
         serviceIds = results.map(item => item.id);
-        await RedisService.cacheSearchResults(search, { serviceTypeId }, results);
+        await RedisService.cacheSearchResults(search, { serviceTypeId, city, neighborhood }, results);
       }
     }
 
@@ -31,6 +32,15 @@ export const getServices = async (req, res) => {
     }
     if (serviceIds) {
       where.id = serviceIds.length > 0 ? serviceIds : [-1]; // Se não encontrar nada, retorna vazio
+    }
+
+    // Filtros de localização no provider
+    const providerWhere = {};
+    if (city) {
+      providerWhere.city = city;
+    }
+    if (neighborhood) {
+      providerWhere.neighborhood = neighborhood;
     }
 
     const services = await Service.findAll({
@@ -44,7 +54,8 @@ export const getServices = async (req, res) => {
         {
           model: User,
           as: 'provider',
-          attributes: ['id', 'name', 'city', 'neighborhood']
+          attributes: ['id', 'name', 'city', 'neighborhood'],
+          where: Object.keys(providerWhere).length > 0 ? providerWhere : undefined
         },
         {
           model: ServiceVariation,
@@ -83,7 +94,30 @@ export const getServiceById = async (req, res) => {
         {
           model: ServiceVariation,
           as: 'variations',
-          attributes: ['id', 'name', 'price', 'durationMinutes']
+          attributes: ['id', 'name', 'price', 'durationMinutes'],
+          include: [
+            {
+              model: Discount,
+              as: 'discounts',
+              where: { isActive: true },
+              required: false,
+              attributes: ['id', 'dayOfWeek', 'discountPercentage', 'startDate', 'endDate']
+            }
+          ]
+        },
+        {
+          model: Review,
+          as: 'reviews',
+          include: [
+            {
+              model: User,
+              as: 'client',
+              attributes: ['id', 'name']
+            }
+          ],
+          attributes: ['id', 'rating', 'comment', 'createdAt'],
+          limit: 10,
+          order: [['createdAt', 'DESC']]
         }
       ]
     });
@@ -92,7 +126,21 @@ export const getServiceById = async (req, res) => {
       return res.status(404).json({ error: 'Serviço não encontrado' });
     }
 
-    res.json({ service });
+    // Calcular média de avaliações
+    const averageRating = await Review.findOne({
+      where: { serviceId: id },
+      attributes: [
+        [fn('AVG', col('rating')), 'avgRating'],
+        [fn('COUNT', col('id')), 'totalReviews']
+      ],
+      raw: true
+    });
+
+    const serviceData = service.get({ plain: true });
+    serviceData.averageRating = averageRating ? parseFloat(averageRating.avgRating || 0).toFixed(2) : '0.00';
+    serviceData.totalReviews = averageRating ? parseInt(averageRating.totalReviews) : 0;
+
+    res.json({ service: serviceData });
   } catch (error) {
     console.error('Erro ao buscar serviço:', error);
     res.status(500).json({ error: 'Erro ao buscar serviço' });

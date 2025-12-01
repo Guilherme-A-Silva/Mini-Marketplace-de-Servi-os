@@ -1,19 +1,11 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
-const Notification = sequelize.define('Notification', {
+const Message = sequelize.define('Message', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true
-  },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
   },
   bookingId: {
     type: DataTypes.INTEGER,
@@ -21,28 +13,37 @@ const Notification = sequelize.define('Notification', {
     references: {
       model: 'bookings',
       key: 'id'
+    },
+    comment: 'Mensagem pode estar relacionada a uma contratação específica'
+  },
+  senderId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
     }
   },
-  type: {
-    type: DataTypes.ENUM(
-      'new_booking',
-      'booking_cancelled',
-      'booking_updated',
-      'booking_confirmed',
-      'booking_rejected',
-      'booking_completed',
-      'suggestion_accepted',
-      'suggestion_rejected'
-    ),
-    allowNull: false
+  receiverId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
   },
-  message: {
+  content: {
     type: DataTypes.TEXT,
     allowNull: false
   },
   isRead: {
     type: DataTypes.BOOLEAN,
-    defaultValue: false
+    defaultValue: false,
+    allowNull: false
+  },
+  readAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   },
   createdAt: {
     type: DataTypes.DATE,
@@ -53,8 +54,8 @@ const Notification = sequelize.define('Notification', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'notifications'
+  tableName: 'messages'
 });
 
-export default Notification;
+export default Message;
 

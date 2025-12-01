@@ -46,6 +46,18 @@
       console.error('Erro ao carregar notificações:', error);
     }
   }
+
+  function formatBookingDate(dateString) {
+    if (!dateString) return '';
+    // Se já está no formato YYYY-MM-DD, usar diretamente para evitar conversão de timezone
+    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+      const [year, month, day] = dateString.split('T')[0].split('-');
+      return `${day}/${month}/${year}`;
+    }
+    // Caso contrário, converter
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
+  }
 </script>
 
 <svelte:head>
@@ -122,7 +134,7 @@
                 Cliente: {booking.client?.name}
               </p>
               <p class="text-sm text-gray-600">
-                {new Date(booking.scheduledDate).toLocaleDateString('pt-BR')} às {booking.scheduledTime}
+                {formatBookingDate(booking.scheduledDate)} às {booking.scheduledTime}
               </p>
               <span class="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
                 {booking.status}

@@ -104,7 +104,7 @@
             console.log('📢 [Cliente] Evento booking-suggestion-rejected recebido:', data);
             if (data.clientId === user?.id) {
               loadBookings(true);
-              notificationStore.info(`Sua sugestão de nova data foi rejeitada pelo prestador.`);
+              //notificationStore.info(`Sua sugestão de nova data foi rejeitada pelo prestador.`);
             }
           });
         }
@@ -145,6 +145,13 @@
       const response = await api.get('/bookings');
       const newBookings = response.data.bookings || [];
       
+      // Ordenar por data de criação (mais recentes primeiro)
+      newBookings.sort((a, b) => {
+        const dateA = new Date(a.createdAt || a.scheduledDate);
+        const dateB = new Date(b.createdAt || b.scheduledDate);
+        return dateB - dateA; // DESC - mais recente primeiro
+      });
+      
       // Verificar se houve mudanças importantes (status)
       const hadChanges = !silent && bookings.length > 0 && checkForImportantChanges(newBookings);
       
@@ -179,6 +186,13 @@
   }
 
   async function cancelBooking(id) {
+    // Verificar se o pedido está concluído antes de tentar cancelar
+    const booking = bookings.find(b => b.id === id);
+    if (booking && booking.status === 'completed') {
+      notificationStore.error('Não é possível cancelar um pedido que já foi concluído.');
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja cancelar esta contratação?')) {
       return;
     }
@@ -215,6 +229,18 @@
       rejected: 'Rejeitada'
     };
     return labels[status] || status;
+  }
+
+  function formatBookingDate(dateString) {
+    if (!dateString) return '';
+    // Se já está no formato YYYY-MM-DD, usar diretamente
+    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+      const [year, month, day] = dateString.split('T')[0].split('-');
+      return `${day}/${month}/${year}`;
+    }
+    // Caso contrário, converter
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
   }
 
   async function acceptSuggestion(id) {
@@ -288,7 +314,7 @@
             Variação: {booking.variation?.name}
           </p>
           <p class="text-sm text-gray-600 mb-2">
-            Data: {new Date(booking.scheduledDate).toLocaleDateString('pt-BR')} às {booking.scheduledTime}
+            Data: {formatBookingDate(booking.scheduledDate)} às {booking.scheduledTime}
           </p>
           <p class="text-lg font-semibold text-blue-600 mb-4">
             R$ {booking.totalPrice}
@@ -304,9 +330,13 @@
             <div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
               <p class="text-sm font-semibold text-blue-800 mb-1">Sugestão do prestador:</p>
               <p class="text-sm text-blue-700 mb-2">
-                Nova data: {new Date(booking.suggestedDate).toLocaleDateString('pt-BR')} às {booking.suggestedTime}
+                Nova data: {formatBookingDate(booking.suggestedDate)} às {booking.suggestedTime}
               </p>
-              {#if !booking.alternativeBookingId}
+              {#if booking.alternativeBookingId}
+                <p class="text-xs text-green-600 italic">Você já aceitou esta sugestão. Verifique suas contratações pendentes.</p>
+              {:else if booking.suggestionRejectedAt}
+                <p class="text-xs text-red-600 italic">Você rejeitou esta sugestão.</p>
+              {:else}
                 <div class="flex gap-2 mt-2">
                   <button
                     on:click={() => acceptSuggestion(booking.id)}
@@ -321,23 +351,34 @@
                     Rejeitar Sugestão
                   </button>
                 </div>
-              {:else}
-                <p class="text-xs text-blue-600 italic">Você já aceitou esta sugestão. Verifique suas contratações pendentes.</p>
               {/if}
             </div>
           {/if}
 
-          <div class="flex justify-between items-center">
-            <span class="px-2 py-1 text-xs font-semibold rounded-full {getStatusColor(booking.status)}">
-              {getStatusLabel(booking.status)}
-            </span>
-            {#if booking.status !== 'cancelled' && booking.status !== 'rejected'}
-              <button
-                on:click={() => cancelBooking(booking.id)}
-                class="text-red-600 hover:text-red-900 text-sm"
+          <div class="flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+              <span class="px-2 py-1 text-xs font-semibold rounded-full {getStatusColor(booking.status)}">
+                {getStatusLabel(booking.status)}
+              </span>
+              {#if booking.status !== 'cancelled' && booking.status !== 'rejected' && booking.status !== 'completed'}
+                <button
+                  on:click={() => cancelBooking(booking.id)}
+                  class="text-red-600 hover:text-red-900 text-sm"
+                >
+                  Cancelar
+                </button>
+              {/if}
+            </div>
+            {#if booking.status === 'confirmed'}
+              <a
+                href="/chat?bookingId={booking.id}"
+                class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm text-center flex items-center justify-center gap-2 mt-2"
               >
-                Cancelar
-              </button>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Iniciar Chat com Prestador
+              </a>
             {/if}
           </div>
         </div>

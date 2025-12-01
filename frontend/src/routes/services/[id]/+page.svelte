@@ -14,6 +14,11 @@
   let loading = true;
   let booking = false;
   let error = '';
+  let reviews = [];
+  let showReviewForm = false;
+  let reviewRating = 5;
+  let reviewComment = '';
+  let submittingReview = false;
 
   let user = null;
   authStore.subscribe((state) => {
@@ -23,6 +28,7 @@
   onMount(async () => {
     await loadService();
     await loadAvailability();
+    await loadReviews();
   });
 
   async function loadService() {
@@ -47,6 +53,87 @@
       availabilitySlots = response.data.slots;
     } catch (error) {
       console.error('Erro ao carregar disponibilidades:', error);
+    }
+  }
+
+  async function loadReviews() {
+    try {
+      const response = await api.get('/reviews', {
+        params: { serviceId: $page.params.id }
+      });
+      reviews = response.data.reviews || [];
+    } catch (error) {
+      console.error('Erro ao carregar avaliações:', error);
+    }
+  }
+
+  function getDayName(dayOfWeek) {
+    const days = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    return days[dayOfWeek] || '';
+  }
+
+  function getDiscountForDate(variation, date) {
+    if (!variation.discounts || !date) return null;
+    const dayOfWeek = new Date(date).getDay();
+    const now = new Date();
+    const selectedDate = new Date(date);
+    
+    return variation.discounts.find(d => {
+      if (d.dayOfWeek !== dayOfWeek || !d.isActive) return false;
+      if (!d.startDate && !d.endDate) return true; // Permanente
+      const startDate = d.startDate ? new Date(d.startDate) : null;
+      const endDate = d.endDate ? new Date(d.endDate) : null;
+      if (startDate && selectedDate < startDate) return false;
+      if (endDate && selectedDate > endDate) return false;
+      return true;
+    });
+  }
+
+  function calculatePriceWithDiscount(variation, date) {
+    const discount = getDiscountForDate(variation, date);
+    if (!discount) return parseFloat(variation.price);
+    const discountAmount = (parseFloat(variation.price) * parseFloat(discount.discountPercentage)) / 100;
+    return parseFloat(variation.price) - discountAmount;
+  }
+
+  async function submitReview() {
+    if (!user) {
+      notificationStore.error('Você precisa estar logado para avaliar');
+      return;
+    }
+
+    try {
+      submittingReview = true;
+      // Buscar bookingId - precisamos encontrar uma contratação concluída do cliente para este serviço
+      const bookingsResponse = await api.get('/bookings', {
+        params: { serviceId: service.id }
+      });
+      const completedBooking = bookingsResponse.data.bookings?.find(
+        b => b.clientId === user.id && b.status === 'completed'
+      );
+
+      if (!completedBooking) {
+        notificationStore.error('Você precisa ter uma contratação concluída para avaliar');
+        return;
+      }
+
+      await api.post('/reviews', {
+        bookingId: completedBooking.id,
+        rating: reviewRating,
+        comment: reviewComment
+      });
+
+      notificationStore.success('Avaliação enviada com sucesso!');
+      showReviewForm = false;
+      reviewRating = 5;
+      reviewComment = '';
+      await loadReviews();
+      await loadService(); // Recarregar para atualizar média
+    } catch (error) {
+      console.error('Erro ao enviar avaliação:', error);
+      notificationStore.error(error.response?.data?.error || 'Erro ao enviar avaliação');
+    } finally {
+      submittingReview = false;
     }
   }
 
@@ -171,10 +258,35 @@
         {/if}
       </div>
 
+      <!-- Avaliações -->
+      {#if service.averageRating !== undefined}
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+          <div class="flex items-center gap-4 mb-2">
+            <div class="text-2xl font-bold">{service.averageRating}</div>
+            <div>
+              <div class="flex items-center gap-1">
+                {#each Array(5) as _, i}
+                  <span class="text-yellow-400">
+                    {#if i < Math.floor(service.averageRating)}
+                      ★
+                    {:else}
+                      ☆
+                    {/if}
+                  </span>
+                {/each}
+              </div>
+              <div class="text-sm text-gray-600">{service.totalReviews} avaliações</div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <div class="mb-6">
         <h2 class="text-lg md:text-xl font-semibold mb-4">Variações</h2>
         <div class="space-y-2">
           {#each service.variations || [] as variation}
+            {@const discount = selectedDate ? getDiscountForDate(variation, selectedDate) : null}
+            {@const finalPrice = selectedDate ? calculatePriceWithDiscount(variation, selectedDate) : parseFloat(variation.price)}
             <label class="flex items-center p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-gray-50 {selectedVariation?.id === variation.id ? 'border-blue-500 bg-blue-50' : ''}">
               <input
                 type="radio"
@@ -185,8 +297,20 @@
               <div class="flex-1">
                 <div class="font-semibold text-sm md:text-base">{variation.name}</div>
                 <div class="text-xs md:text-sm text-gray-600">
-                  R$ {variation.price} • {variation.durationMinutes} minutos
+                  {#if discount && selectedDate}
+                    <span class="line-through text-gray-400">R$ {variation.price}</span>
+                    <span class="text-green-600 font-semibold ml-2">R$ {finalPrice.toFixed(2)}</span>
+                    <span class="text-green-600 ml-1">(-{discount.discountPercentage}%)</span>
+                  {:else}
+                    R$ {variation.price}
+                  {/if}
+                  • {variation.durationMinutes} minutos
                 </div>
+                {#if variation.discounts && variation.discounts.length > 0}
+                  <div class="text-xs text-blue-600 mt-1">
+                    Descontos disponíveis: {variation.discounts.map(d => getDayName(d.dayOfWeek)).join(', ')}
+                  </div>
+                {/if}
               </div>
             </label>
           {/each}
@@ -260,6 +384,88 @@
           </p>
         </div>
       {/if}
+
+      <!-- Avaliações -->
+      <div class="mb-6 border-t pt-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg md:text-xl font-semibold">Avaliações ({reviews.length})</h2>
+          {#if user && user.role === 'client'}
+            <button
+              on:click={() => showReviewForm = !showReviewForm}
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+            >
+              {showReviewForm ? 'Cancelar' : 'Avaliar'}
+            </button>
+          {/if}
+        </div>
+
+        {#if showReviewForm}
+          <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 class="font-semibold mb-4">Deixe sua avaliação</h3>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Nota</label>
+                <div class="flex gap-2">
+                  {#each Array(5) as _, i}
+                    <button
+                      type="button"
+                      on:click={() => reviewRating = i + 1}
+                      class="text-3xl {i < reviewRating ? 'text-yellow-400' : 'text-gray-300'} hover:text-yellow-400 transition"
+                    >
+                      ★
+                    </button>
+                  {/each}
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Comentário</label>
+                <textarea
+                  bind:value={reviewComment}
+                  rows="4"
+                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Compartilhe sua experiência..."
+                ></textarea>
+              </div>
+              <button
+                on:click={submitReview}
+                disabled={submittingReview}
+                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition text-sm"
+              >
+                {submittingReview ? 'Enviando...' : 'Enviar Avaliação'}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        {#if reviews.length === 0}
+          <p class="text-gray-600 text-sm">Ainda não há avaliações para este serviço.</p>
+        {:else}
+          <div class="space-y-4">
+            {#each reviews as review}
+              <div class="p-4 border rounded-lg">
+                <div class="flex items-start justify-between mb-2">
+                  <div>
+                    <div class="font-semibold text-sm">{review.client?.name || 'Anônimo'}</div>
+                    <div class="flex items-center gap-1 mt-1">
+                      {#each Array(5) as _, i}
+                        <span class="text-yellow-400 text-sm">
+                          {#if i < review.rating}★{:else}☆{/if}
+                        </span>
+                      {/each}
+                    </div>
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {new Date(review.createdAt).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                {#if review.comment}
+                  <p class="text-sm text-gray-700 mt-2">{review.comment}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 {:else}

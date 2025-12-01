@@ -27,6 +27,9 @@ Sistema completo de marketplace para profissionais liberais, permitindo que pres
 - Prestador pode **aprovar** ou **rejeitar** contratações
 - Ao rejeitar, prestador pode sugerir nova data/horário
 - Cliente pode **aceitar** ou **rejeitar** sugestões do prestador
+- **Prevenção de cancelamento** de pedidos já completados
+- **Finalização de pedidos** pelo prestador (marca como concluído)
+- **Ordenação automática** de pedidos por data (mais recentes primeiro)
 - Notificações em tempo real via WebSocket
 
 ✅ **Painel do Prestador**
@@ -35,6 +38,7 @@ Sistema completo de marketplace para profissionais liberais, permitindo que pres
 - Lista de contratações com **filtros** (todas, pendentes, confirmadas, rejeitadas)
 - **Aprovar** ou **rejeitar** contratações pendentes
 - Sugerir nova data/horário ao rejeitar
+- **Finalizar pedidos** confirmados (marca como concluído)
 - Cancelamento de contratações
 - Visualização de motivo de rejeição e sugestões
 
@@ -46,6 +50,12 @@ Sistema completo de marketplace para profissionais liberais, permitindo que pres
 ⭐ **Notificações em Tempo Real** - Sistema de notificações via WebSocket com Redis pub/sub
 ⭐ **Sistema de Aprovação/Rejeição** - Prestador controla quais contratações aceitar
 ⭐ **Sugestão de Nova Data** - Prestador pode sugerir alternativa ao rejeitar
+⭐ **Sistema de Chat** - Chat em tempo real para cada pedido confirmado, encerrado após conclusão
+⭐ **Prevenção de Rejeição Duplicada** - Cliente não pode rejeitar a mesma sugestão múltiplas vezes
+⭐ **Finalização de Pedidos** - Prestador pode marcar pedidos confirmados como concluídos
+⭐ **Ordenação Inteligente** - Pedidos ordenados automaticamente por data (mais recentes primeiro)
+⭐ **Correção de Timezone** - Sistema robusto de tratamento de datas sem problemas de timezone
+⭐ **Header Fixo** - Navegação sempre visível no topo da página
 ⭐ **Notificações em Popup** - Sistema elegante de notificações que aparecem no topo da página
 ⭐ **Design Responsivo** - Interface otimizada para mobile e desktop
 ⭐ **Deduplicação de Notificações** - Sistema inteligente que evita notificações duplicadas
@@ -206,9 +216,12 @@ npm run dev:frontend
 - **availability_slots** - Slots de disponibilidade dos prestadores
 - **bookings** - Contratações realizadas
   - Campos: `status` (pending/confirmed/rejected/cancelled/completed)
-  - Campos: `rejectionReason`, `suggestedDate`, `suggestedTime`, `alternativeBookingId`
+  - Campos: `rejectionReason`, `suggestedDate`, `suggestedTime`, `alternativeBookingId`, `suggestionRejectedAt`
+  - Campos de data: `scheduledDate`, `endDate` (DATEONLY - sem timezone)
+- **messages** - Mensagens do chat entre cliente e prestador
+  - Relacionado a bookings confirmados
 - **notifications** - Notificações para prestadores e clientes
-  - Tipos: `booking_created`, `booking_updated`, `booking_cancelled`, `booking_rejected`, `booking_suggestion_accepted`, `booking_suggestion_rejected`
+  - Tipos: `new_booking`, `booking_updated`, `booking_cancelled`, `booking_confirmed`, `booking_rejected`, `booking_completed`, `suggestion_accepted`, `suggestion_rejected`
 
 ## 🎯 Modelo de Dados
 
@@ -231,12 +244,17 @@ Exemplo:
 1. **Cliente cria contratação** → Status: `pending`
 2. **Prestador recebe notificação** em tempo real
 3. **Prestador pode:**
-   - **Aprovar** → Status: `confirmed` (cliente recebe notificação)
+   - **Aprovar** → Status: `confirmed` (cliente recebe notificação, chat fica disponível)
    - **Rejeitar** → Status: `rejected` (pode incluir motivo e sugestão de nova data)
 4. **Se houver sugestão de nova data:**
    - Cliente pode **aceitar** → Cria nova contratação `pending`
-   - Cliente pode **rejeitar** → Prestador recebe notificação
-5. **Qualquer parte pode cancelar** → Status: `cancelled`
+   - Cliente pode **rejeitar** → Prestador recebe notificação (sugestão não pode ser rejeitada novamente)
+5. **Pedido confirmado:**
+   - Chat fica disponível para comunicação entre cliente e prestador
+   - Prestador pode **finalizar** → Status: `completed` (chat é encerrado)
+6. **Cancelamento:**
+   - Cliente não pode cancelar pedidos já completados
+   - Qualquer parte pode cancelar antes da conclusão → Status: `cancelled`
 
 ### Sistema de Reserva
 - Validação de sobreposição com contas confirmadas
@@ -244,6 +262,8 @@ Exemplo:
 - Bloqueio de slots durante a duração do serviço
 - Suporte para serviços de múltiplos dias
 - Status de contratação: `pending` → `confirmed`/`rejected` → `completed`/`cancelled`
+- **Tratamento robusto de datas** - Uso de DATEONLY para evitar problemas de timezone
+- **Prevenção de ações inválidas** - Cliente não pode cancelar pedidos completados
 
 ## 🔐 Autenticação
 
@@ -276,13 +296,21 @@ O sistema utiliza JWT (JSON Web Tokens) para autenticação:
 
 ### Contratações
 - `POST /api/bookings` - Criar contratação (fica pendente)
-- `GET /api/bookings` - Listar contratações (prestador ou cliente)
+- `GET /api/bookings` - Listar contratações (prestador ou cliente, ordenadas por data)
 - `PUT /api/bookings/:id/approve` - Aprovar contratação (prestador)
 - `PUT /api/bookings/:id/reject` - Rejeitar contratação (prestador)
   - Body opcional: `{ reason, suggestedDate, suggestedTime }`
 - `PUT /api/bookings/:id/accept-suggestion` - Aceitar sugestão de nova data (cliente)
-- `PUT /api/bookings/:id/reject-suggestion` - Rejeitar sugestão de nova data (cliente)
-- `PUT /api/bookings/:id/cancel` - Cancelar contratação
+- `PUT /api/bookings/:id/reject-suggestion` - Rejeitar sugestão de nova data (cliente, apenas uma vez)
+- `PUT /api/bookings/:id/complete` - Finalizar contratação (prestador, apenas para confirmadas)
+- `PUT /api/bookings/:id/cancel` - Cancelar contratação (não permite cancelar completadas)
+
+### Chat
+- `GET /api/messages/conversations` - Listar conversas do usuário
+- `GET /api/messages/:bookingId` - Obter mensagens de uma conversa
+- `POST /api/messages` - Enviar mensagem
+  - Body: `{ bookingId, message }` ou `{ receiverId, message }`
+  - Chat disponível apenas para bookings confirmados
 
 ## 🧪 Dados de Teste (Seed)
 
@@ -302,8 +330,10 @@ O seed cria:
 
 O frontend foi desenvolvido com SvelteKit e inclui:
 - Design moderno e **totalmente responsivo** (mobile-first)
+- **Header fixo no topo** - Navegação sempre visível durante a rolagem
 - Navegação intuitiva com menu hambúrguer para mobile
 - Área administrativa para prestadores
+- **Sistema de chat** integrado com interface moderna
 - **Sistema de notificações em popup** (substitui alerts)
   - Notificações aparecem no topo da página
   - Animações suaves (desce e sobe)
@@ -315,6 +345,8 @@ O frontend foi desenvolvido com SvelteKit e inclui:
 - **Deduplicação inteligente** de notificações
 - **Layout em cards** para melhor visualização mobile
 - **Filtros reativos** na lista de agendamentos do prestador
+- **Ordenação automática** de pedidos (mais recentes primeiro)
+- **Validações visuais** - Botões desabilitados para ações inválidas (ex: cancelar pedido completado)
 - **Acessibilidade** - Suporte a navegação por teclado e leitores de tela
 
 ## 🔍 Busca e Cache
@@ -333,12 +365,24 @@ O sistema utiliza **WebSocket (Socket.IO)** com **Redis pub/sub** para notifica�
 - **Notificações instantâneas** quando:
   - Nova contratação é criada (prestador recebe)
   - Contratação é aprovada/rejeitada (cliente recebe)
+  - Contratação é finalizada (cliente recebe)
   - Contratação é cancelada (ambos recebem)
   - Sugestão de nova data é aceita/rejeitada (ambos recebem)
+  - Nova mensagem no chat (ambos recebem)
 
 - **Sistema de deduplicação** evita notificações duplicadas
 - **Notificações em popup** elegantes no topo da página
 - **Sincronização automática** das listas após ações
+
+## 💬 Sistema de Chat
+
+O sistema inclui um **chat em tempo real** para comunicação entre cliente e prestador:
+
+- **Chat por pedido confirmado** - Cada pedido confirmado tem seu próprio chat
+- **Chat encerrado automaticamente** quando o pedido é completado ou cancelado
+- **Mensagens em tempo real** via WebSocket
+- **Marca mensagens como lidas** automaticamente ao abrir a conversa
+- **Interface otimizada** com histórico de mensagens e indicadores de leitura
 
 ## 📦 Tecnologias Utilizadas
 

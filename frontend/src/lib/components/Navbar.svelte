@@ -22,7 +22,7 @@
   }
 </script>
 
-<nav class="bg-white shadow-md relative z-50">
+<nav class="bg-white shadow-md fixed top-0 left-0 right-0 z-50">
   <div class="container mx-auto px-4">
     <div class="flex justify-between items-center h-16">
       <!-- Logo e menu desktop -->
@@ -36,6 +36,7 @@
           {/if}
           {#if isAuthenticated}
             <a href={user?.role === 'provider' ? '/provider/bookings' : '/bookings'} class="text-gray-700 hover:text-blue-600 transition">Minhas Contratações</a>
+            <a href="/chat" class="text-gray-700 hover:text-blue-600 transition">Chat</a>
           {/if}
         </div>
       </div>
@@ -110,6 +111,13 @@
               class="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
             >
               Minhas Contratações
+            </a>
+            <a
+              href="/chat"
+              on:click={closeMobileMenu}
+              class="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
+            >
+              Chat
             </a>
             {#if user?.role === 'provider'}
               <a

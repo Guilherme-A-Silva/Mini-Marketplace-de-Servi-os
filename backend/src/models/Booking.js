@@ -40,7 +40,7 @@ const Booking = sequelize.define('Booking', {
     }
   },
   scheduledDate: {
-    type: DataTypes.DATE,
+    type: DataTypes.DATEONLY,
     allowNull: false
   },
   scheduledTime: {
@@ -48,7 +48,7 @@ const Booking = sequelize.define('Booking', {
     allowNull: false
   },
   endDate: {
-    type: DataTypes.DATE,
+    type: DataTypes.DATEONLY,
     allowNull: true,
     comment: 'Para serviços de múltiplos dias'
   },
@@ -72,7 +72,7 @@ const Booking = sequelize.define('Booking', {
     comment: 'Motivo da rejeição pelo prestador'
   },
   suggestedDate: {
-    type: DataTypes.DATE,
+    type: DataTypes.DATEONLY,
     allowNull: true,
     comment: 'Data sugerida pelo prestador ao rejeitar'
   },
@@ -89,6 +89,11 @@ const Booking = sequelize.define('Booking', {
       key: 'id'
     },
     comment: 'ID da nova contratação criada quando cliente aceita sugestão'
+  },
+  suggestionRejectedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Data/hora em que o cliente rejeitou a sugestão do prestador'
   },
   createdAt: {
     type: DataTypes.DATE,

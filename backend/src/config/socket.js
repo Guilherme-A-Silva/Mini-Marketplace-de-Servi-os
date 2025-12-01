@@ -45,25 +45,41 @@ export function initializeSocket(server) {
     redisPublisher = redis.duplicate();
 
     // Escutar eventos do Redis
-    redisSubscriber.subscribe('booking-updated', 'booking-created', 'booking-cancelled');
+    redisSubscriber.subscribe('booking-updated', 'booking-created', 'booking-cancelled', 'booking-suggestion-accepted', 'booking-suggestion-rejected', 'message-created');
     
     redisSubscriber.on('message', (channel, message) => {
       try {
         const data = JSON.parse(message);
-        console.log(`📢 Evento Redis: ${channel}`, data);
+        console.log(`📢 Evento Redis: ${channel}`, { 
+          bookingId: data.bookingId, 
+          messageId: data.messageId,
+          senderId: data.senderId,
+          receiverId: data.receiverId,
+          providerId: data.providerId, 
+          clientId: data.clientId 
+        });
         
-        // Emitir para os clientes interessados
-        if (data.userId) {
-          io.to(`user:${data.userId}`).emit(channel, data);
-        }
-        
-        // Também emitir para todos os prestadores se for um evento de booking
-        if (data.providerId) {
-          io.to(`user:${data.providerId}`).emit(channel, data);
-        }
-        
-        if (data.clientId) {
-          io.to(`user:${data.clientId}`).emit(channel, data);
+        // Para mensagens, emitir para sender e receiver
+        if (channel === 'message-created') {
+          if (data.senderId) {
+            io.to(`user:${data.senderId}`).emit(channel, data);
+            console.log(`📤 Mensagem emitida para sender: user:${data.senderId}`);
+          }
+          if (data.receiverId) {
+            io.to(`user:${data.receiverId}`).emit(channel, data);
+            console.log(`📤 Mensagem emitida para receiver: user:${data.receiverId}`);
+          }
+        } else {
+          // Para outros eventos (bookings), emitir para os usuários envolvidos
+          if (data.userId) {
+            io.to(`user:${data.userId}`).emit(channel, data);
+          }
+          if (data.providerId) {
+            io.to(`user:${data.providerId}`).emit(channel, data);
+          }
+          if (data.clientId) {
+            io.to(`user:${data.clientId}`).emit(channel, data);
+          }
         }
       } catch (error) {
         console.error('Erro ao processar mensagem Redis:', error);
@@ -88,6 +104,9 @@ export function getIO() {
 export function publishToRedis(channel, data) {
   console.log(`📤 Publicando evento ${channel}:`, { 
     bookingId: data.bookingId, 
+    messageId: data.messageId,
+    senderId: data.senderId,
+    receiverId: data.receiverId,
     providerId: data.providerId, 
     clientId: data.clientId 
   });
@@ -103,21 +122,34 @@ export function publishToRedis(channel, data) {
   
   // Sempre emitir diretamente também (fallback e para garantir)
   if (io) {
-    const rooms = [];
-    if (data.userId) {
-      rooms.push(`user:${data.userId}`);
+    // Para mensagens, emitir para sender e receiver
+    if (channel === 'message-created') {
+      if (data.senderId) {
+        io.to(`user:${data.senderId}`).emit(channel, data);
+        console.log(`📡 Mensagem ${channel} emitida diretamente para sender: user:${data.senderId}`);
+      }
+      if (data.receiverId) {
+        io.to(`user:${data.receiverId}`).emit(channel, data);
+        console.log(`📡 Mensagem ${channel} emitida diretamente para receiver: user:${data.receiverId}`);
+      }
+    } else {
+      // Para outros eventos, usar a lógica padrão
+      const rooms = [];
+      if (data.userId) {
+        rooms.push(`user:${data.userId}`);
+      }
+      if (data.providerId) {
+        rooms.push(`user:${data.providerId}`);
+      }
+      if (data.clientId) {
+        rooms.push(`user:${data.clientId}`);
+      }
+      
+      rooms.forEach(room => {
+        io.to(room).emit(channel, data);
+        console.log(`📡 Evento ${channel} emitido diretamente para sala ${room}`);
+      });
     }
-    if (data.providerId) {
-      rooms.push(`user:${data.providerId}`);
-    }
-    if (data.clientId) {
-      rooms.push(`user:${data.clientId}`);
-    }
-    
-    rooms.forEach(room => {
-      io.to(room).emit(channel, data);
-      console.log(`📡 Evento ${channel} emitido para sala ${room}`);
-    });
   }
 }
 

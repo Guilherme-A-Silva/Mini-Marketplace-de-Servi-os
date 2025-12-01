@@ -65,10 +65,11 @@
             // Notificar sobre mudanças de status
             const serviceName = data.booking?.service?.name || data.booking?.Service?.name || 'Serviço';
             console.log('Status recebido:', status, 'Service name:', serviceName);
-            
+            /*
             if (status === 'confirmed') {
               notificationStore.info(`Contratação "${serviceName}" foi confirmada.`);
             }
+            */
             // Não mostrar notificação para 'rejected' - o prestador já vê a confirmação ao clicar em rejeitar
           }
         });
@@ -105,7 +106,7 @@
             console.log('🔄 Contratação cancelada, atualizando lista...');
             loadBookings(true);
             const serviceName = data.booking?.service?.name || data.booking?.Service?.name || 'Serviço';
-            notificationStore.warning(`Contratação "${serviceName}" foi cancelada.`);
+            // notificationStore.warning(`Contratação "${serviceName}" foi cancelada.`);
           }
         });
 
@@ -168,6 +169,13 @@
     try {
       const response = await api.get('/bookings');
       const newBookings = response.data.bookings || [];
+      
+      // Ordenar por data de criação (mais recentes primeiro)
+      newBookings.sort((a, b) => {
+        const dateA = new Date(a.createdAt || a.scheduledDate);
+        const dateB = new Date(b.createdAt || b.scheduledDate);
+        return dateB - dateA; // DESC - mais recente primeiro
+      });
       
       // Sempre atualizar a lista
       bookings = newBookings;
@@ -244,6 +252,23 @@
     }
   }
 
+  async function completeBooking(id) {
+    if (!confirm('Tem certeza que deseja marcar esta contratação como concluída?')) {
+      return;
+    }
+
+    try {
+      await api.put(`/bookings/${id}/complete`);
+      // Recarregar imediatamente
+      await loadBookings(false);
+      notificationStore.success('Contratação marcada como concluída com sucesso!');
+      // Recarregar novamente após 1 segundo para garantir sincronização
+      setTimeout(() => loadBookings(false), 1000);
+    } catch (error) {
+      notificationStore.error(error.response?.data?.error || 'Erro ao finalizar contratação');
+    }
+  }
+
   async function cancelBooking(id) {
     if (!confirm('Tem certeza que deseja cancelar esta contratação?')) {
       return;
@@ -281,6 +306,18 @@
       rejected: 'Rejeitada'
     };
     return labels[status] || status;
+  }
+
+  function formatBookingDate(dateString) {
+    if (!dateString) return '';
+    // Se já está no formato YYYY-MM-DD, usar diretamente para evitar conversão de timezone
+    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+      const [year, month, day] = dateString.split('T')[0].split('-');
+      return `${day}/${month}/${year}`;
+    }
+    // Caso contrário, converter
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
   }
 </script>
 
@@ -369,7 +406,7 @@
             <div>
               <p class="text-xs text-gray-500">Data e Horário:</p>
               <p class="text-sm text-gray-900">
-                {new Date(booking.scheduledDate).toLocaleDateString('pt-BR')} às {booking.scheduledTime}
+                {formatBookingDate(booking.scheduledDate)} às {booking.scheduledTime}
               </p>
             </div>
             {#if booking.endDate && booking.endTime}
@@ -405,12 +442,29 @@
                 ✗ Rejeitar
               </button>
             {:else if String(booking.status) === 'confirmed'}
+              <a
+                href="/chat?bookingId={booking.id}"
+                class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm text-center flex items-center justify-center gap-2"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Iniciar Chat
+              </a>
+              <button
+                on:click={() => completeBooking(booking.id)}
+                class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm"
+              >
+                ✓ Finalizar Pedido
+              </button>
               <button
                 on:click={() => cancelBooking(booking.id)}
                 class="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium text-sm"
               >
                 Cancelar
               </button>
+            {:else if String(booking.status) === 'completed'}
+              <p class="text-xs text-green-600 font-semibold text-center py-2">✓ Pedido Finalizado</p>
             {:else if String(booking.status) === 'rejected' || String(booking.status) === 'cancelled'}
               <p class="text-xs text-gray-500 italic text-center py-2">Sem ações disponíveis</p>
             {/if}

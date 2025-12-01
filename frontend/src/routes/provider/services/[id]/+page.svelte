@@ -227,6 +227,13 @@
           >
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
+          <button
+            type="button"
+            on:click={() => goto(`/provider/services/${$page.params.id}/discounts`)}
+            class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Gerenciar Descontos
+          </button>
           <a
             href="/provider/services"
             class="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"

@@ -40,7 +40,7 @@
 <div class="min-h-screen bg-gray-50">
   <NotificationContainer />
   <Navbar {user} {isAuthenticated} />
-  <main class="container mx-auto px-2 md:px-4 py-4 md:py-8">
+  <main class="container mx-auto px-2 md:px-4 py-4 md:py-8 pt-20 md:pt-24">
     <slot />
   </main>
 </div>
